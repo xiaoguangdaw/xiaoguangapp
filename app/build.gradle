@@ -40,9 +40,9 @@ android {
             def ksPath = System.getenv("KEYSTORE_PATH")
             if (ksPath != null && file(ksPath).exists()) {
                 storeFile file(ksPath)
-                storePassword System.getenv("KS_PASS") ?: ""
-                keyAlias System.getenv("KEY_ALIAS") ?: ""
-                keyPassword System.getenv("KEY_PASS") ?: ""
+                storePassword System.getenv("KS_PASS") ?: "changeit123"
+                keyAlias System.getenv("KEY_ALIAS") ?: "mykey"
+                keyPassword System.getenv("KEY_PASS") ?: "changeit123"
             }
         }
     }
@@ -50,8 +50,10 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.release.storeFile != null ?
-                    signingConfigs.release : signingConfigs.debug
+            // 有 release 签名就用，没有就退化成 debug（保证能安装）
+            def hasRelease = System.getenv("KEYSTORE_PATH") != null &&
+                    file(System.getenv("KEYSTORE_PATH")).exists()
+            signingConfig hasRelease ? signingConfigs.release : signingConfigs.debug
         }
     }
 
