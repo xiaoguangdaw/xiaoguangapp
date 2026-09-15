@@ -70,9 +70,24 @@ android {
     }
 }
 
+// ============================================================
+// 强制统一 Kotlin 相关依赖版本，避免
+// "Duplicate class kotlin.collections.jdk8.CollectionsJDK8Kt"
+// 这类来自不同库间接依赖不同 kotlin 版本的冲突
+// ============================================================
+configurations.all {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.24'
+    }
+}
+
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.webkit:webkit:1.11.0'
+    // 显式声明，确保与上面 force 的版本一致
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
 }
 
 // 打印本次包名，方便在 Actions 日志里确认
