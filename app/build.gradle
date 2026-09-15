@@ -1,42 +1,36 @@
 plugins {
     id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
 }
 
 // ============================================================
 // 核心：自动生成唯一包名
-// 每次构建，applicationId 都不同 → 系统永远视为不同 App → 永不 UID 冲突
-// 规则：前缀 + "." + 时间戳(base36) + 短随机串
-// 你也可以手动传：./gradlew assembleRelease -PappId=com.you.myapp
+// 每次构建 applicationId 都不同 → 系统永远视为不同 App → 永不 UID 冲突
+// 也可手动传：-PappId=com.you.myapp
 // ============================================================
-
-def basePrefix = "com.mytools"          // ← 想改前缀就改这里（建议用自己的名字）
+def basePrefix = "com.guardx"
 def stamp = new Date().format("yyMMddHHmm", TimeZone.getTimeZone("Asia/Shanghai"))
 def rnd = Integer.toHexString(new Random().nextInt(0xFFFF))
 def autoId = "${basePrefix}.a${stamp}${rnd}"
 
-// 应用名（显示在桌面上），可由 GitHub Actions 传入
-def appTitle = project.findProperty("appTitle") ?: "我的应用"
-
-// 优先使用外部传入的 appId（手动指定时），否则用自动生成的
+def appTitle = project.findProperty("appTitle") ?: "GuardX 守护"
 def finalAppId = project.findProperty("appId") ?: autoId
 
 android {
-    namespace 'com.auto.webwrap'         // 代码包名，固定不变，无影响
+    namespace 'com.auto.guardx'
     compileSdk 34
 
     defaultConfig {
-        applicationId finalAppId          // ★ 唯一包名在这里生成
+        applicationId finalAppId
         minSdk 24
         targetSdk 34
         versionCode 1
         versionName "1.0"
-        resValue "string", "app_name", appTitle   // 动态应用名
+        resValue "string", "app_name", appTitle
     }
 
     signingConfigs {
         release {
-            // 从环境变量读取签名信息（GitHub Secrets 注入）
-            // 本地没有时退化为 debug 签名，保证也能装
             def ksPath = System.getenv("KEYSTORE_PATH")
             if (ksPath != null && file(ksPath).exists()) {
                 storeFile file(ksPath)
@@ -50,31 +44,28 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            // 有 release 签名就用，没有就退化成 debug（保证能安装）
             def hasRelease = System.getenv("KEYSTORE_PATH") != null &&
                     file(System.getenv("KEYSTORE_PATH")).exists()
             signingConfig hasRelease ? signingConfigs.release : signingConfigs.debug
         }
     }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    // 打包后重命名成好认的名字
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "${appTitle}-${finalAppId}.apk"
+            outputFileName = "GuardX-${finalAppId}.apk"
         }
     }
 }
 
-// ============================================================
-// 强制统一 Kotlin 相关依赖版本，避免
-// "Duplicate class kotlin.collections.jdk8.CollectionsJDK8Kt"
-// 这类来自不同库间接依赖不同 kotlin 版本的冲突
-// ============================================================
 configurations.all {
     resolutionStrategy {
         force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
@@ -86,11 +77,9 @@ configurations.all {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.webkit:webkit:1.11.0'
-    // 显式声明，确保与上面 force 的版本一致
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
 }
 
-// 打印本次包名，方便在 Actions 日志里确认
 task showAppId {
     doLast {
         println "=========================================="

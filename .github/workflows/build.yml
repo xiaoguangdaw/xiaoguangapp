@@ -1,124 +1,67 @@
 name: Build APK
 
-# ============================================================
-# 触发方式（两种，任选）
-# 1) 手动点按钮：仓库页 -> Actions -> Build APK -> Run workflow
-# 2) 推送到 main 分支自动触发
-# ============================================================
 on:
   workflow_dispatch:
     inputs:
       app_title:
-        description: '应用名（显示在桌面上的名字）'
-        required: false
-        default: '我的应用'
+        description: 'App 显示名称'
+        required: true
+        default: 'GuardX 守护'
       app_id:
-        description: '包名（留空=每次自动生成唯一包名）'
+        description: '包名后缀（留空自动生成，套用唯一包名避免 UID 冲突）'
         required: false
         default: ''
-  push:
-    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
-      - name: 拉取代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 设置 JDK 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
-      # runner 镜像自带 Android SDK，这里只做兜底，不再用已失效的 setup-android@v3
-      - name: 准备 Android SDK 环境
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Compute app id / title
+        id: vars
         run: |
-          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          if [ ! -d "$SDK" ]; then
-            SDK="/usr/local/lib/android/sdk"
-          fi
-          echo "ANDROID_HOME=$SDK" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$SDK" >> $GITHUB_ENV
-          echo "SDK 路径: $SDK"
-          ls -d "$SDK"/platforms/* 2>/dev/null | tail -3 || echo "(未列出 platforms，交给 Gradle 自动下载)"
-
-      - name: 安装 Gradle
-        run: |
-          GRADLE_VER=8.7
-          cd "$RUNNER_TEMP"
-          curl -sSL -o gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VER}-bin.zip"
-          unzip -q gradle.zip
-          echo "$RUNNER_TEMP/gradle-${GRADLE_VER}/bin" >> $GITHUB_PATH
-          "$RUNNER_TEMP/gradle-${GRADLE_VER}/bin/gradle" -v
-
-      - name: 生成签名密钥（首次自动创建，之后复用）
-        id: keystore
-        env:
-          SEC_KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
-          SEC_KS_PASS: ${{ secrets.KS_PASS }}
-          SEC_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          SEC_KEY_PASS: ${{ secrets.KEY_PASS }}
-        run: |
-          KS_DIR="$RUNNER_TEMP/ks"
-          mkdir -p "$KS_DIR"
-          KS_FILE="$KS_DIR/release.keystore"
-
-          # 没配 Secrets 时用默认值（在 shell 里用 ${VAR:-default}，Actions 表达式不支持 || ）
-          KS_PASS="${SEC_KS_PASS:-changeit123}"
-          KEY_ALIAS="${SEC_KEY_ALIAS:-mykey}"
-          KEY_PASS="${SEC_KEY_PASS:-changeit123}"
-
-          if [ -n "$SEC_KEYSTORE_B64" ]; then
-            echo "$SEC_KEYSTORE_B64" | base64 -d > "$KS_FILE"
-            echo "使用已有密钥"
+          TITLE="${{ github.event.inputs.app_title }}"
+          if [ -z "$TITLE" ]; then TITLE="GuardX 守护"; fi
+          if [ -n "${{ github.event.inputs.app_id }}" ]; then
+            APPID="${{ github.event.inputs.app_id }}"
           else
-            keytool -genkeypair -v \
-              -keystore "$KS_FILE" \
-              -alias "$KEY_ALIAS" \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass "$KS_PASS" \
-              -keypass  "$KEY_PASS" \
-              -dname "CN=WebWrap, OU=Dev, O=Personal, L=City, S=State, C=CN"
-            echo "已生成新密钥（仅本次有效，如需长期请配置 Secrets）"
+            APPID="com.guardx.a$(TZ=Asia/Shanghai date +%y%m%d%H%M)$(openssl rand -hex 3)"
           fi
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "appid=$APPID" >> $GITHUB_OUTPUT
+          echo "Resolved appId=$APPID"
+          echo "Resolved title=$TITLE"
 
-          echo "KEYSTORE_PATH=$KS_FILE" >> $GITHUB_ENV
-          echo "KS_PASS=$KS_PASS" >> $GITHUB_ENV
-          echo "KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
-          echo "KEY_PASS=$KEY_PASS" >> $GITHUB_ENV
-
-      - name: Gradle 构建
+      - name: Build debug APK
         run: |
-          TITLE="${{ github.event.inputs.app_title || '我的应用' }}"
-          APPID="${{ github.event.inputs.app_id }}"
-          if [ -z "$APPID" ]; then
-            gradle assembleRelease -PappTitle="$TITLE" --no-daemon --stacktrace
-          else
-            gradle assembleRelease -PappTitle="$TITLE" -PappId="$APPID" --no-daemon --stacktrace
-          fi
+          gradle assembleDebug \
+            -PappTitle="${{ steps.vars.outputs.title }}" \
+            -PappId="${{ steps.vars.outputs.appid }}" \
+            --no-daemon --stacktrace
 
-      - name: 找出 APK
-        id: found
+      - name: Locate APK
+        id: apk
         run: |
-          APK=$(find app/build/outputs/apk -name "*.apk" | head -1)
-          echo "APK_PATH=$APK" >> $GITHUB_ENV
-          echo "APK_NAME=$(basename $APK)" >> $GITHUB_ENV
-          ls -la app/build/outputs/apk/release/ || true
+          APK=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+          echo "path=$APK" >> $GITHUB_OUTPUT
+          ls -l "$APK"
 
-      - name: 上传 APK（可在 Actions 页面下载）
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.APK_NAME }}
-          path: ${{ env.APK_PATH }}
-
-      - name: 打印结果摘要
-        run: |
-          echo "==================== 构建完成 ===================="
-          echo "APK 文件名: ${{ env.APK_NAME }}"
-          echo "下载位置: 本次运行页面底部的 Artifacts 区域"
-          echo "=================================================="
+          name: GuardX-APK
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error

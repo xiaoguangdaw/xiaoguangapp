@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>GuardX 守护</title>
+<style>
+  :root{
+    --bg:#0f1419; --card:#1a212b; --card2:#222c38;
+    --fg:#e6edf3; --sub:#8b98a5; --line:#2b3644;
+    --accent:#00c853; --danger:#ff5252; --warn:#ffb300; --info:#40a9ff;
+    --radius:16px;
+  }
+  body[data-theme="light"]{
+    --bg:#f4f6f8; --card:#ffffff; --card2:#eef2f6;
+    --fg:#1a2027; --sub:#66717d; --line:#e1e7ee;
+    --accent:#00a844; --danger:#e53935; --warn:#f57c00; --info:#1976d2;
+  }
+  body[data-theme="mint"]{
+    --bg:#0d1f1c; --card:#132a26; --card2:#1a3733;
+    --fg:#e0f5ee; --sub:#7fb3a6; --line:#20443d;
+    --accent:#2ee6a8; --danger:#ff6b6b; --warn:#ffcc66; --info:#5cc8ff;
+  }
+  body[data-theme="dusk"]{
+    --bg:#1a1524; --card:#241c33; --card2:#2f2542;
+    --fg:#efe6ff; --sub:#a695c4; --line:#3a2f52;
+    --accent:#b388ff; --danger:#ff6b9d; --warn:#ffd166; --info:#6ec6ff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:15px;-webkit-font-smoothing:antialiased;}
+  body{padding:14px 14px 90px 14px;transition:background .25s,color .25s;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .logo{width:38px;height:38px;border-radius:11px;
+    background:linear-gradient(135deg,#0f2027,#203a43);
+    display:flex;align-items:center;justify-content:center;font-size:19px;}
+  .brand h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.3px;}
+  .brand p{margin:2px 0 0 0;font-size:11px;color:var(--sub);}
+  .theme-btn{background:var(--card);border:1px solid var(--line);color:var(--fg);
+    width:38px;height:38px;border-radius:11px;font-size:17px;cursor:pointer;}
+  .hero{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px;margin-bottom:12px;position:relative;overflow:hidden;}
+  .hero::after{content:"";position:absolute;right:-30px;top:-30px;width:120px;height:120px;
+    border-radius:50%;background:var(--accent);opacity:.07;}
+  .hero-row{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1;}
+  .hero-title{font-size:16px;font-weight:700;}
+  .hero-status{font-size:12px;color:var(--sub);margin-top:5px;}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;
+    margin-right:6px;vertical-align:middle;background:#666;}
+  .dot.on{background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  .dot.err{background:var(--danger);box-shadow:0 0 8px var(--danger);}
+  .dot.warn{background:var(--warn);box-shadow:0 0 8px var(--warn);}
+  .switch{position:relative;display:inline-block;width:58px;height:32px;flex:0 0 auto;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{position:absolute;cursor:pointer;inset:0;background:var(--card2);
+    border:1px solid var(--line);border-radius:32px;transition:.25s;}
+  .slider:before{content:"";position:absolute;height:24px;width:24px;left:3px;top:3px;
+    background:#8b98a5;border-radius:50%;transition:.25s;}
+  .switch input:checked + .slider{background:var(--accent);border-color:var(--accent);}
+  .switch input:checked + .slider:before{transform:translateX(26px);background:#fff;}
+  .stats{display:flex;gap:10px;margin-bottom:12px;}
+  .stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:12px 10px;text-align:center;}
+  .stat .num{font-size:20px;font-weight:700;line-height:1.2;}
+  .stat .lbl{font-size:11px;color:var(--sub);margin-top:3px;}
+  .banner{border-radius:13px;padding:11px 13px;font-size:13px;margin-bottom:10px;
+    display:flex;gap:9px;align-items:flex-start;line-height:1.5;}
+  .banner .ico{font-size:15px;line-height:1.4;}
+  .banner.bad{background:rgba(255,82,82,.12);border:1px solid rgba(255,82,82,.4);color:var(--danger);}
+  .banner.warn{background:rgba(255,179,0,.12);border:1px solid rgba(255,179,0,.4);color:var(--warn);}
+  .banner.info{background:rgba(64,169,255,.1);border:1px solid rgba(64,169,255,.35);color:var(--info);}
+  .page{display:none;}
+  .page.active{display:block;animation:fade .22s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  .sec-title{font-size:13px;color:var(--sub);margin:16px 2px 9px 2px;font-weight:600;
+    display:flex;justify-content:space-between;align-items:center;}
+  .sec-title .link{color:var(--info);font-weight:500;cursor:pointer;font-size:12px;}
+  .item{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:12px 13px;margin-bottom:9px;}
+  .item-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  .item-name{font-size:14px;font-weight:600;word-break:break-all;}
+  .item-time{font-size:11px;color:var(--sub);flex:0 0 auto;}
+  .item-path{font-size:11px;color:var(--sub);margin-top:5px;word-break:break-all;line-height:1.45;}
+  .item-reason{font-size:12px;margin-top:7px;padding:7px 9px;border-radius:9px;
+    background:rgba(255,82,82,.1);color:var(--danger);line-height:1.5;}
+  .item-meta{font-size:11px;color:var(--sub);margin-top:6px;display:flex;gap:12px;flex-wrap:wrap;}
+  .item-meta b{color:var(--fg);font-weight:600;}
+  .actions{display:flex;gap:8px;margin-top:10px;}
+  .btn{flex:1;border:none;border-radius:10px;padding:9px;font-size:13px;
+    font-weight:600;cursor:pointer;font-family:inherit;
+    background:var(--card2);color:var(--fg);border:1px solid var(--line);}
+  .btn.danger{background:rgba(255,82,82,.15);color:var(--danger);border-color:rgba(255,82,82,.4);}
+  .btn.ok{background:rgba(0,200,83,.14);color:var(--accent);border-color:rgba(0,200,83,.4);}
+  .btn.primary{background:var(--accent);color:#04140a;border-color:var(--accent);}
+  .btn:active{transform:scale(.97);}
+  .log{display:flex;gap:9px;padding:9px 11px;background:var(--card);
+    border:1px solid var(--line);border-radius:11px;margin-bottom:7px;font-size:12px;}
+  .log .act{flex:0 0 auto;font-weight:700;font-size:11px;padding:2px 7px;border-radius:6px;
+    height:fit-content;background:var(--card2);}
+  .log .act.add{color:var(--warn);}
+  .log .act.del{color:var(--danger);}
+  .log .body{flex:1;min-width:0;}
+  .log .nm{font-weight:600;word-break:break-all;}
+  .log .sub{color:var(--sub);font-size:11px;margin-top:3px;word-break:break-all;line-height:1.4;}
+  .row{background:var(--card);border:1px solid var(--line);border-radius:13px;
+    padding:13px;margin-bottom:9px;display:flex;justify-content:space-between;
+    align-items:center;gap:10px;}
+  .row .rt{font-size:14px;font-weight:600;}
+  .row .rs{font-size:11px;color:var(--sub);margin-top:3px;line-height:1.45;}
+  .mini{font-size:11px;padding:4px 9px;border-radius:8px;background:var(--card2);
+    color:var(--sub);border:1px solid var(--line);cursor:pointer;flex:0 0 auto;}
+  .mini.danger{color:var(--danger);border-color:rgba(255,82,82,.4);}
+  .tag{display:inline-block;font-size:11px;padding:3px 9px;border-radius:20px;
+    background:var(--card2);margin:4px 6px 0 0;color:var(--fg);word-break:break-all;}
+  .tag .x{color:var(--danger);margin-left:6px;cursor:pointer;font-weight:700;}
+  .inputrow{display:flex;gap:8px;margin-bottom:9px;}
+  .inputrow input{flex:1;background:var(--card);border:1px solid var(--line);
+    border-radius:11px;padding:11px 13px;color:var(--fg);font-size:13px;font-family:inherit;}
+  .inputrow input:focus{outline:none;border-color:var(--accent);}
+  .empty{text-align:center;color:var(--sub);font-size:13px;padding:34px 10px;line-height:1.7;}
+  .tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);
+    border-top:1px solid var(--line);padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px));
+    z-index:50;}
+  .tab{flex:1;text-align:center;padding:6px 0;color:var(--sub);font-size:11px;
+    cursor:pointer;position:relative;}
+  .tab .ti{font-size:19px;display:block;margin-bottom:2px;}
+  .tab.on{color:var(--accent);font-weight:700;}
+  .tab .badge{position:absolute;top:-2px;right:50%;transform:translateX(16px);
+    background:var(--danger);color:#fff;font-size:10px;font-weight:700;
+    min-width:16px;height:16px;line-height:16px;border-radius:9px;padding:0 4px;display:none;}
+  .tab .badge.show{display:block;}
+  #toast{position:fixed;left:50%;bottom:86px;transform:translate(-50%,20px);
+    background:#000a;color:#fff;font-size:13px;padding:10px 18px;border-radius:22px;
+    opacity:0;pointer-events:none;transition:.25s;z-index:99;max-width:86%;text-align:center;}
+  #toast.show{opacity:1;transform:translate(-50%,0);}
+</style>
+</head>
+<body data-theme="dark">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">🛡️</div>
+      <div>
+        <h1>GuardX 守护</h1>
+        <p id="brandSub">监控文件变动 · 溯源写入者</p>
+      </div>
+    </div>
+    <button class="theme-btn" onclick="cycleTheme()">🎨</button>
+  </div>
+
+  <div class="page active" id="page-home">
+    <div class="hero">
+      <div class="hero-row">
+        <div>
+          <div class="hero-title">守护状态</div>
+          <div class="hero-status"><span class="dot off" id="mainDot"></span><span id="mainTxt">未启动</span></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="mainSwitch" onchange="toggleGuard(this.checked)" />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+    <div id="banners"></div>
+    <div class="stats">
+      <div class="stat"><div class="num" id="stFiles">0</div><div class="lbl">已知文件</div></div>
+      <div class="stat"><div class="num" id="stSus" style="color:var(--danger)">0</div><div class="lbl">可疑文件</div></div>
+      <div class="stat"><div class="num" id="stScan" style="font-size:13px;padding-top:5px">--</div><div class="lbl">上次扫描</div></div>
+    </div>
+    <div class="sec-title">最近事件 <span class="link" onclick="loadRecent()">刷新</span></div>
+    <div id="recentBox"></div>
+  </div>
+
+  <div class="page" id="page-sus">
+    <div class="sec-title">可疑文件 <span class="link" onclick="loadSuspicious()">重新扫描</span></div>
+    <div class="banner info">
+      <span class="ico">ℹ️</span>
+      <span>这里只列<strong>新出现且特征可疑</strong>的文件。删除需要 root；不确定就点「标记正常」。</span>
+    </div>
+    <div id="susBox"></div>
+  </div>
+
+  <div class="page" id="page-log">
+    <div class="sec-title">事件日志 <span class="link" onclick="clearLogs()" style="color:var(--danger)">清空</span></div>
+    <div id="logBox"></div>
+  </div>
+
+  <div class="page" id="page-set">
+    <div class="sec-title">监控目录</div>
+    <div class="inputrow">
+      <input id="newDir" placeholder="例如 /sdcard/Download" />
+      <button class="btn primary" style="flex:0 0 78px" onclick="addDir()">添加</button>
+    </div>
+    <div id="dirsBox"></div>
+    <div class="sec-title">白名单（永不报警）</div>
+    <div id="whiteBox"></div>
+    <div class="sec-title">其他</div>
+    <div class="row">
+      <div><div class="rt">开机自启</div><div class="rs">重启后自动开始守护</div></div>
+      <label class="switch"><input type="checkbox" id="autoSwitch" onchange="setAutoStart(this.checked)" /><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <div><div class="rt">重建基线</div><div class="rs">把当前所有文件当作"已知"，清空可疑列表</div></div>
+      <span class="mini" onclick="rebuildBaseline()">执行</span>
+    </div>
+    <div class="row">
+      <div><div class="rt">存储权限</div><div class="rs">Android 11+ 需「所有文件访问」</div></div>
+      <span class="mini" onclick="requestStorage()">申请</span>
+    </div>
+    <div class="row">
+      <div><div class="rt">系统权限页</div><div class="rs">给 GuardX 授予 root</div></div>
+      <span class="mini" onclick="openAppSettings()">打开</span>
+    </div>
+    <div class="sec-title">关于</div>
+    <div class="row" style="display:block">
+      <div class="rt">GuardX</div>
+      <div class="rs" style="margin-top:6px">
+        原理：用 root 每隔几秒扫描监控目录，和基线对比，发现新文件。<br/>
+        能做的：<b>事后发现</b>新增文件、识别可疑特征、溯源是哪个 UID 写的、让你亲手删。<br/>
+        做不到的：<b>阻止</b>对方删除或写入（需要内核级 hook，本应用没有）。<br/>
+        别把它当保险箱，把它当监控录像。
+      </div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab on" data-page="home" onclick="switchTab('home')"><span class="ti">🏠</span>首页</div>
+    <div class="tab" data-page="sus" onclick="switchTab('sus')"><span class="ti">⚠️</span>可疑<span class="badge" id="susBadge">0</span></div>
+    <div class="tab" data-page="log" onclick="switchTab('log')"><span class="ti">📜</span>日志</div>
+    <div class="tab" data-page="set" onclick="switchTab('set')"><span class="ti">⚙️</span>设置</div>
+  </div>
+
+  <div id="toast"></div>
+
+<script>
+/* ================= 基础 ================= */
+var bridge = window.GuardX || null;
+var curStatus = null;
+
+/* ---------- 主题 ---------- */
+var themes = ['dark','light','mint','dusk'];
+function applyTheme(t){
+  document.body.setAttribute('data-theme', t);
+  try{ localStorage.setItem('guardx_theme', t); }catch(e){}
+}
+function cycleTheme(){
+  var cur = document.body.getAttribute('data-theme') || 'dark';
+  var i = themes.indexOf(cur);
+  applyTheme(themes[(i + 1) % themes.length]);
+  toast('主题：' + document.body.getAttribute('data-theme'));
+}
+
+/* ---------- Tab ---------- */
+function switchTab(name){
+  var pages = document.querySelectorAll('.page');
+  for(var i=0;i<pages.length;i++) pages[i].classList.remove('active');
+  var target = document.getElementById('page-' + name);
+  if(target) target.classList.add('active');
+
+  var tabs = document.querySelectorAll('.tab');
+  for(var k=0;k<tabs.length;k++){
+    if(tabs[k].getAttribute('data-page') === name) tabs[k].classList.add('on');
+    else tabs[k].classList.remove('on');
+  }
+  if(name === 'home') loadRecent();
+  if(name === 'sus') loadSuspicious();
+  if(name === 'log') loadLogs();
+  if(name === 'set') loadSettings();
+}
+
+/* ---------- 工具 ---------- */
+function toast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  if(t._tm) clearTimeout(t._tm);
+  t._tm = setTimeout(function(){ t.classList.remove('show'); }, 1900);
+}
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'"').replace(/'/g,'&#39;');
+}
+function j(s, fallback){
+  try{ return JSON.parse(s); }catch(e){ return fallback; }
+}
+function ago(ms){
+  if(!ms) return '--';
+  var s = Math.floor((Date.now()-ms)/1000);
+  if(s < 0) s = 0;
+  if(s < 60) return s + ' 秒前';
+  if(s < 3600) return Math.floor(s/60) + ' 分钟前';
+  if(s < 86400) return Math.floor(s/3600) + ' 小时前';
+  return Math.floor(s/86400) + ' 天前';
+}
+function human(b){
+  b = Number(b) || 0;
+  if(b < 1024) return b + ' B';
+  if(b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  return (b/1024/1024).toFixed(1) + ' MB';
+}
+/* 把路径安全嵌进 onclick 字符串 */
+function escapeAttr(s){
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '"');
+}
+
+/* ================= 状态渲染 ================= */
+function renderStatus(st){
+  if(!st) return;
+  curStatus = st;
+
+  var sw = document.getElementById('mainSwitch');
+  var dot = document.getElementById('mainDot');
+  var txt = document.getElementById('mainTxt');
+  var brand = document.getElementById('brandSub');
+
+  if(sw.checked !== !!st.running) sw.checked = !!st.running;
+
+  if(!st.root){
+    dot.className = 'dot err';
+    txt.textContent = '未获取 root';
+    brand.textContent = '需要 root 才能工作';
+  }else if(st.running){
+    dot.className = 'dot on';
+    txt.textContent = '守护中' + (st.baselineReady ? '' : '（建立基线…）');
+    brand.textContent = '监控中 · ' + (st.dirs ? st.dirs.length : 0) + ' 个目录';
+  }else{
+    dot.className = 'dot off';
+    txt.textContent = '已停止';
+    brand.textContent = '监控文件变动 · 溯源写入者';
+  }
+
+  document.getElementById('stFiles').textContent = st.fileCount || 0;
+  document.getElementById('stSus').textContent = st.suspiciousCount || 0;
+  document.getElementById('stScan').textContent = st.lastScan ? ago(st.lastScan) : '--';
+
+  var badge = document.getElementById('susBadge');
+  if(st.suspiciousCount > 0){
+    badge.textContent = st.suspiciousCount > 99 ? '99+' : st.suspiciousCount;
+    badge.classList.add('show');
+  }else{
+    badge.classList.remove('show');
+  }
+
+  var a = document.getElementById('autoSwitch');
+  if(a && a.checked !== !!st.autoStart) a.checked = !!st.autoStart;
+
+  renderBanners(st);
+}
+
+function renderBanners(st){
+  var html = '';
+  if(!st.root){
+    html += '<div class="banner bad"><span class="ico">⛔</span>'
+         +  '<span><strong>没有 root 权限。</strong>GuardX 扫描和删除都依赖 root。'
+         +  '去「设置 → 系统权限页」给本应用授权，或检查你的 root 管理器。</span></div>';
+  }
+  if(st.root && !st.running){
+    html += '<div class="banner warn"><span class="ico">⏸️</span>'
+         +  '<span>守护未运行。打开上面的开关开始监控。</span></div>';
+  }
+  if(st.running && !st.baselineReady){
+    html += '<div class="banner info"><span class="ico">🔄</span>'
+         +  '<span>正在建立文件基线，首次扫描完成后才会开始报可疑。</span></div>';
+  }
+  if(st.suspiciousCount > 0){
+    html += '<div class="banner bad"><span class="ico">⚠️</span>'
+         +  '<span>发现 <strong>' + st.suspiciousCount + '</strong> 个可疑文件，'
+         +  '<a href="javascript:switchTab(\'sus\')" style="color:inherit;font-weight:700">去看看</a></span></div>';
+  }
+  document.getElementById('banners').innerHTML = html;
+}
+
+/* ---------- 首页最近事件 ---------- */
+function loadRecent(){
+  if(!bridge) return;
+  var ev = j(bridge.getRecentEvents(), []);
+  var box = document.getElementById('recentBox');
+  if(!ev || !ev.length){
+    box.innerHTML = '<div class="empty">还没有事件。<br/>启动守护后，新增/删除的文件会出现在这里。</div>';
+    return;
+  }
+  var html = '';
+  ev.reverse().forEach(function(e){
+    var act = String(e.action || '');
+    var cls = act.indexOf('删') >= 0 ? 'del' : 'add';
+    html += '<div class="log">'
+         +  '<span class="act ' + cls + '">' + esc(act) + '</span>'
+         +  '<div class="body"><div class="nm">' + esc(e.name || e.path) + '</div>'
+         +  '<div class="sub">' + esc(e.timeText) + ' · ' + esc(e.source || '未知来源') + '</div>'
+         +  '</div></div>';
+  });
+  box.innerHTML = html;
+}
+
+/* ---------- 可疑列表 ---------- */
+function loadSuspicious(){
+  if(!bridge) return;
+  var arr = j(bridge.getSuspicious(), []);
+  var box = document.getElementById('susBox');
+  var open = (arr || []).filter(function(x){ return !x.handled; });
+  if(!open.length){
+    box.innerHTML = '<div class="empty">✅ 没有可疑文件。<br/>保持这样就好。</div>';
+    return;
+  }
+  var html = '';
+  open.forEach(function(x){
+    html += '<div class="item">'
+         +  '<div class="item-top"><div class="item-name">' + esc(x.name || x.path) + '</div>'
+         +  '<div class="item-time">' + esc(x.timeText || '') + '</div></div>'
+         +  '<div class="item-path">' + esc(x.path) + '</div>';
+    if(x.reason){
+      html += '<div class="item-reason">🚩 ' + esc(x.reason) + '</div>';
+    }
+    html += '<div class="item-meta">'
+         +  '<span>大小 <b>' + esc(x.sizeText || human(x.size)) + '</b></span>'
+         +  '<span>来源 <b>' + esc(x.source || '未知来源') + '</b></span>'
+         +  '</div>'
+         +  '<div class="actions">'
+         +  '<button class="btn danger" onclick="delSus(\'' + escapeAttr(x.path) + '\')">root 删除</button>'
+         +  '<button class="btn ok" onclick="markWhite(\'' + escapeAttr(x.path) + '\')">标记正常</button>'
+         +  '</div></div>';
+  });
+  box.innerHTML = html;
+}
+
+function delSus(path){
+  if(!bridge){ toast('桥接不可用'); return; }
+  if(!confirm('确定用 root 删除吗？\n\n' + path + '\n\n删了就找不回来了。')) return;
+  var ok = bridge.deleteSuspicious(path);
+  if(ok){ toast('已删除'); loadSuspicious(); }
+  else{ toast('删除失败（可能没 root 或权限不足）'); }
+}
+
+function markWhite(path){
+  if(!bridge){ toast('桥接不可用'); return; }
+  bridge.whitelist(path);
+  toast('已加入白名单');
+  loadSuspicious();
+}
+
+function rebuildBaseline(){
+  if(!bridge) return;
+  if(!confirm('重建基线？\n\n当前所有文件会被视为"已知"，可疑列表清空。\n适合刚整理完文件时用。')) return;
+  bridge.rebuildBaseline();
+  toast('正在重建基线…');
+  loadSuspicious();
+}
+
+/* ================= 日志页 ================= */
+function loadLogs(){
+  if(!bridge) return;
+  var arr = [];
+  try{ arr = JSON.parse(bridge.getLogs(200)) || []; }catch(e){ arr = []; }
+  var box = document.getElementById('logBox');
+  if(!arr.length){ box.innerHTML = '<div class="empty">还没有记录</div>'; return; }
+  var h = '';
+  arr.forEach(function(it){
+    var act = it.action || '事件';
+    var cls = (act.indexOf('新增') >= 0) ? 'new' : (act.indexOf('删除') >= 0 ? 'del' : 'info');
+    h += '<div class="logitem ' + cls + '">' +
+           '<div class="li-top"><span class="li-act">' + esc(act) + '</span>' +
+           '<span class="li-time">' + esc(it.timeText || ago(it.time)) + '</span></div>' +
+           '<div class="li-path">' + esc(it.path || it.name || '') + '</div>' +
+           (it.source ? '<div class="li-src">来源：' + esc(it.source) + (it.sizeText ? ' · ' + esc(it.sizeText) : '') + '</div>' : '') +
+         '</div>';
+  });
+  box.innerHTML = h;
+}
+
+function clearLogs(){
+  if(!bridge) return;
+  if(!confirm('清空全部日志？')) return;
+  bridge.clearLogs();
+  toast('日志已清空');
+  loadLogs();
+}
+
+/* ================= 设置页 ================= */
+function loadSettings(){
+  if(!bridge) return;
+  var dirs = [], white = [], cfg = {};
+  try{ dirs = JSON.parse(bridge.getDirs()) || []; }catch(e){ dirs = []; }
+  try{ white = JSON.parse(bridge.getWhitelist()) || []; }catch(e){ white = []; }
+  try{ cfg = JSON.parse(bridge.getStatus()) || {}; }catch(e){ cfg = {}; }
+
+  var db = document.getElementById('dirsBox');
+  if(!dirs.length){ db.innerHTML = '<div class="empty">没有监控目录</div>'; }
+  else{
+    var dh = '';
+    dirs.forEach(function(d){
+      dh += '<div class="dirrow"><span class="dpath">' + esc(d) + '</span>' +
+            '<button class="mini danger" onclick="rmDir(\'' + escapeAttr(d) + '\')">移除</button></div>';
+    });
+    db.innerHTML = dh;
+  }
+
+  var wb = document.getElementById('whiteBox');
+  if(!white.length){ wb.innerHTML = '<div class="empty">白名单是空的</div>'; }
+  else{
+    var wh = '';
+    white.forEach(function(p){
+      wh += '<div class="dirrow"><span class="dpath">' + esc(p) + '</span>' +
+            '<button class="mini danger" onclick="rmWhite(\'' + escapeAttr(p) + '\')">移除</button></div>';
+    });
+    wb.innerHTML = wh;
+  }
+
+  var sw = document.getElementById('autoSwitch');
+  if(sw) sw.checked = !!cfg.autoStart;
+}
+
+function addDir(){
+  if(!bridge){ toast('桥接不可用'); return; }
+  var el = document.getElementById('newDir');
+  var v = (el.value || '').trim();
+  if(!v){ toast('请输入路径'); return; }
+  if(v.charAt(0) !== '/'){ toast('路径必须以 / 开头'); return; }
+  var ok = bridge.addDir(v);
+  if(ok){ toast('已添加'); el.value = ''; loadSettings(); }
+  else{ toast('添加失败（路径不合法或已存在）'); }
+}
+
+function rmDir(p){
+  if(!bridge) return;
+  if(!confirm('移除监控目录？\n\n' + p)) return;
+  bridge.removeDir(p);
+  toast('已移除');
+  loadSettings();
+}
+
+function rmWhite(p){
+  if(!bridge) return;
+  bridge.unwhitelist(p);
+  toast('已移出白名单');
+  loadSettings();
+}
+
+function setAutoStart(on){
+  if(!bridge) return;
+  bridge.setAutoStart(!!on);
+  toast(on ? '已开启开机自启' : '已关闭开机自启');
+}
+
+function requestStorage(){
+  if(!bridge) return;
+  bridge.requestStorage();
+  toast('已请求存储权限');
+}
+
+function openAppSettings(){
+  if(!bridge) return;
+  bridge.openAppSettings();
+}
+
+/* ================= 主开关 ================= */
+function toggleGuard(on){
+  if(!bridge){ toast('桥接不可用'); return; }
+  var st = null;
+  try{ st = JSON.parse(bridge.getStatus()); }catch(e){}
+  if(on){
+    if(st && !st.root){ toast('没有 root，无法启动守护'); syncSwitch(false); return; }
+    bridge.startGuard();
+    toast('守护已启动');
+  }else{
+    bridge.stopGuard();
+    toast('守护已停止');
+  }
+  setTimeout(function(){ if(bridge){ try{ renderStatus(JSON.parse(bridge.getStatus())); }catch(e){} } }, 300);
+}
+
+function syncSwitch(on){
+  var el = document.getElementById('mainSwitch');
+  if(el) el.checked = !!on;
+}
+
+/* ================= 状态回调（由 Android 每 2 秒推送） ================= */
+window.__guardxStatus = function(st){
+  try{ renderStatus(st); }catch(e){}
+};
+
+/* ================= 初始化 ================= */
+(function init(){
+  try{
+    var saved = localStorage.getItem('guardx_theme');
+    if(saved && themes.indexOf(saved) >= 0){ theme = saved; }
+  }catch(e){}
+  applyTheme();
+  if(!bridge){
+    setTimeout(function(){ if(window.GuardX){ bridge = window.GuardX; refreshAll(); } }, 200);
+  }
+  refreshAll();
+})();
+
+function refreshAll(){
+  if(!bridge) return;
+  try{ renderStatus(JSON.parse(bridge.getStatus())); }catch(e){}
+  loadRecent();
+  loadSuspicious();
+  if(document.getElementById('page-log').classList.contains('active')) loadLogs();
+  if(document.getElementById('page-set').classList.contains('active')) loadSettings();
+}
+</script>
+</body>
+</html>

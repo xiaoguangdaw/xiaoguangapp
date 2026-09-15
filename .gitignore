@@ -1,13 +1,13 @@
-# 忽略构建产物和本地配置
 *.iml
-.gradle/
-local.properties
-.idea/
+.gradle
+/local.properties
+/.idea
 .DS_Store
-build/
-captures/
-.externalNativeBuild/
-.cxx/
-*.apk
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.jks
 *.keystore
-!gradle/wrapper/gradle-wrapper.jar
