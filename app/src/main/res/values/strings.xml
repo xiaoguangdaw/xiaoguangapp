@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 应用名由 build.gradle 动态注入（resValue），此处仅作兜底默认值 -->
+    <string name="app_name">我的应用</string>
+</resources>
