@@ -35,47 +35,71 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 设置 Android SDK
-        uses: android-actions/setup-android@v3
+      # runner 镜像自带 Android SDK，这里只做兜底，不再用已失效的 setup-android@v3
+      - name: 准备 Android SDK 环境
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK" ]; then
+            SDK="/usr/local/lib/android/sdk"
+          fi
+          echo "ANDROID_HOME=$SDK" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK" >> $GITHUB_ENV
+          echo "SDK 路径: $SDK"
+          ls -d "$SDK"/platforms/* 2>/dev/null | tail -3 || echo "(未列出 platforms，交给 Gradle 自动下载)"
+
+      - name: 安装 Gradle
+        run: |
+          GRADLE_VER=8.7
+          cd "$RUNNER_TEMP"
+          curl -sSL -o gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VER}-bin.zip"
+          unzip -q gradle.zip
+          echo "$RUNNER_TEMP/gradle-${GRADLE_VER}/bin" >> $GITHUB_PATH
+          "$RUNNER_TEMP/gradle-${GRADLE_VER}/bin/gradle" -v
 
       - name: 生成签名密钥（首次自动创建，之后复用）
         id: keystore
+        env:
+          SEC_KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          SEC_KS_PASS: ${{ secrets.KS_PASS }}
+          SEC_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SEC_KEY_PASS: ${{ secrets.KEY_PASS }}
         run: |
           KS_DIR="$RUNNER_TEMP/ks"
           mkdir -p "$KS_DIR"
           KS_FILE="$KS_DIR/release.keystore"
 
-          # 如果仓库里存了 base64 密钥（Secrets），就用它；否则当场生成一个
-          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$KS_FILE"
+          # 没配 Secrets 时用默认值（在 shell 里用 ${VAR:-default}，Actions 表达式不支持 || ）
+          KS_PASS="${SEC_KS_PASS:-changeit123}"
+          KEY_ALIAS="${SEC_KEY_ALIAS:-mykey}"
+          KEY_PASS="${SEC_KEY_PASS:-changeit123}"
+
+          if [ -n "$SEC_KEYSTORE_B64" ]; then
+            echo "$SEC_KEYSTORE_B64" | base64 -d > "$KS_FILE"
             echo "使用已有密钥"
           else
             keytool -genkeypair -v \
               -keystore "$KS_FILE" \
-              -alias mykey \
+              -alias "$KEY_ALIAS" \
               -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass "${{ secrets.KS_PASS || 'changeit123' }}" \
-              -keypass  "${{ secrets.KEY_PASS || 'changeit123' }}" \
+              -storepass "$KS_PASS" \
+              -keypass  "$KEY_PASS" \
               -dname "CN=WebWrap, OU=Dev, O=Personal, L=City, S=State, C=CN"
             echo "已生成新密钥（仅本次有效，如需长期请配置 Secrets）"
           fi
 
           echo "KEYSTORE_PATH=$KS_FILE" >> $GITHUB_ENV
-          echo "KS_PASS=${{ secrets.KS_PASS || 'changeit123' }}" >> $GITHUB_ENV
-          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS || 'mykey' }}" >> $GITHUB_ENV
-          echo "KEY_PASS=${{ secrets.KEY_PASS || 'changeit123' }}" >> $GITHUB_ENV
-
-      - name: 赋予 gradlew 执行权限
-        run: chmod +x ./gradlew || true
+          echo "KS_PASS=$KS_PASS" >> $GITHUB_ENV
+          echo "KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+          echo "KEY_PASS=$KEY_PASS" >> $GITHUB_ENV
 
       - name: Gradle 构建
         run: |
           TITLE="${{ github.event.inputs.app_title || '我的应用' }}"
           APPID="${{ github.event.inputs.app_id }}"
           if [ -z "$APPID" ]; then
-            ./gradlew assembleRelease -PappTitle="$TITLE"
+            gradle assembleRelease -PappTitle="$TITLE" --no-daemon --stacktrace
           else
-            ./gradlew assembleRelease -PappTitle="$TITLE" -PappId="$APPID"
+            gradle assembleRelease -PappTitle="$TITLE" -PappId="$APPID" --no-daemon --stacktrace
           fi
 
       - name: 找出 APK
