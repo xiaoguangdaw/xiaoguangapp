@@ -1,0 +1,100 @@
+name: Build APK
+
+# ============================================================
+# 触发方式（两种，任选）
+# 1) 手动点按钮：仓库页 -> Actions -> Build APK -> Run workflow
+# 2) 推送到 main 分支自动触发
+# ============================================================
+on:
+  workflow_dispatch:
+    inputs:
+      app_title:
+        description: '应用名（显示在桌面上的名字）'
+        required: false
+        default: '我的应用'
+      app_id:
+        description: '包名（留空=每次自动生成唯一包名）'
+        required: false
+        default: ''
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 设置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 设置 Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 生成签名密钥（首次自动创建，之后复用）
+        id: keystore
+        run: |
+          KS_DIR="$RUNNER_TEMP/ks"
+          mkdir -p "$KS_DIR"
+          KS_FILE="$KS_DIR/release.keystore"
+
+          # 如果仓库里存了 base64 密钥（Secrets），就用它；否则当场生成一个
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$KS_FILE"
+            echo "使用已有密钥"
+          else
+            keytool -genkeypair -v \
+              -keystore "$KS_FILE" \
+              -alias mykey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "${{ secrets.KS_PASS || 'changeit123' }}" \
+              -keypass  "${{ secrets.KEY_PASS || 'changeit123' }}" \
+              -dname "CN=WebWrap, OU=Dev, O=Personal, L=City, S=State, C=CN"
+            echo "已生成新密钥（仅本次有效，如需长期请配置 Secrets）"
+          fi
+
+          echo "KEYSTORE_PATH=$KS_FILE" >> $GITHUB_ENV
+          echo "KS_PASS=${{ secrets.KS_PASS || 'changeit123' }}" >> $GITHUB_ENV
+          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS || 'mykey' }}" >> $GITHUB_ENV
+          echo "KEY_PASS=${{ secrets.KEY_PASS || 'changeit123' }}" >> $GITHUB_ENV
+
+      - name: 赋予 gradlew 执行权限
+        run: chmod +x ./gradlew || true
+
+      - name: Gradle 构建
+        run: |
+          TITLE="${{ github.event.inputs.app_title || '我的应用' }}"
+          APPID="${{ github.event.inputs.app_id }}"
+          if [ -z "$APPID" ]; then
+            ./gradlew assembleRelease -PappTitle="$TITLE"
+          else
+            ./gradlew assembleRelease -PappTitle="$TITLE" -PappId="$APPID"
+          fi
+
+      - name: 找出 APK
+        id: found
+        run: |
+          APK=$(find app/build/outputs/apk -name "*.apk" | head -1)
+          echo "APK_PATH=$APK" >> $GITHUB_ENV
+          echo "APK_NAME=$(basename $APK)" >> $GITHUB_ENV
+          ls -la app/build/outputs/apk/release/ || true
+
+      - name: 上传 APK（可在 Actions 页面下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: ${{ env.APK_PATH }}
+
+      - name: 打印结果摘要
+        run: |
+          echo "==================== 构建完成 ===================="
+          echo "APK 文件名: ${{ env.APK_NAME }}"
+          echo "下载位置: 本次运行页面底部的 Artifacts 区域"
+          echo "=================================================="
